@@ -3,17 +3,25 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
-    "data": "node scripts/build-data.mjs",
-    "predev": "node scripts/build-data.mjs --if-missing",
+    "data": "node scripts/build-data.ts",
+    "predev": "node scripts/build-data.ts --if-missing",
     "dev": "vite",
-    "prebuild": "node scripts/build-data.mjs --if-missing",
-    "build": "vite build",
+    "typecheck": "tsc",
+    "prebuild": "node scripts/build-data.ts --if-missing",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/alpinejs": "^3.17.0",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^26.6.4",
     "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
     "vite": "^8.3.3"
   },
   "dependencies": {

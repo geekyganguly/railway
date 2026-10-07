@@ -1,31 +1,39 @@
 import './style.css';
 import Alpine from 'alpinejs';
-import { loadIndex, loadTrain, padNumber } from './data.js';
-import { clearRoute, focusStop, initMap, setBottomInset, showRoute } from './map.js';
+import { loadIndex, loadTrain, padNumber } from './data.ts';
+import { clearRoute, focusStop, initMap, setBottomInset, showRoute } from './map.ts';
+import type { Stop, Train, TrainIndex } from './types.ts';
 
 // Below Tailwind's lg breakpoint the details panel is a bottom sheet over the map.
 const phone = matchMedia('(max-width: 1023.98px)');
 const OPEN_HEIGHT = '85%'; // keep in sync with the sheet's max-h-[85%]
 const DRAG_THRESHOLD = 40;
 
+declare global {
+  interface Window {
+    Alpine: typeof Alpine;
+  }
+}
+
 Alpine.data('trainApp', () => ({
   query: '',
-  train: null,
+  train: null as Train | null,
   loading: false,
   error: '',
-  suggestions: [],
+  suggestions: [] as TrainIndex,
   showPassing: false,
-  selected: null,
+  selected: null as number | null,
   sheetOpen: false,
-  sheetHeight: null,
+  /** CSS height of the phone bottom sheet; null on desktop. */
+  sheetHeight: null as string | null,
   peekPx: 0,
   dragging: false,
-  drag: null,
+  drag: null as { y: number; height: number } | null,
   suppressClick: false,
 
   init() {
     initMap(this.$refs.map, { attributionPosition: phone.matches ? 'topright' : 'bottomright' });
-    if (!phone.matches) document.getElementById('train-number').focus();
+    if (!phone.matches) document.getElementById('train-number')?.focus();
     const fromUrl = () => new URLSearchParams(location.search).get('train');
     const start = fromUrl();
     if (start) {
@@ -55,7 +63,7 @@ Alpine.data('trainApp', () => ({
     }
     const { sheet, sheetBody } = this.$refs;
     const top = sheet.getBoundingClientRect().top - sheetBody.scrollTop;
-    const bottoms = [...sheet.querySelectorAll('[data-peek]')]
+    const bottoms = [...sheet.querySelectorAll<HTMLElement>('[data-peek]')]
       .filter((el) => el.offsetParent !== null)
       .map((el) => el.getBoundingClientRect().bottom - top);
     this.peekPx = Math.ceil(Math.max(0, ...bottoms) + 16);
@@ -63,7 +71,7 @@ Alpine.data('trainApp', () => ({
     setBottomInset(this.peekPx);
   },
 
-  openSheet(open) {
+  openSheet(open: boolean) {
     this.sheetOpen = open;
     this.sheetHeight = open ? OPEN_HEIGHT : `${this.peekPx}px`;
     if (!open) this.$refs.sheetBody.scrollTop = 0;
@@ -77,23 +85,23 @@ Alpine.data('trainApp', () => ({
     this.openSheet(!this.sheetOpen);
   },
 
-  dragStart(e) {
+  dragStart(e: PointerEvent) {
     if (!phone.matches) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     this.drag = { y: e.clientY, height: this.$refs.sheet.offsetHeight };
   },
 
-  dragMove(e) {
+  dragMove(e: PointerEvent) {
     if (!this.drag) return;
     const dy = e.clientY - this.drag.y;
     if (!this.dragging && Math.abs(dy) < 5) return;
     this.dragging = true;
-    const max = this.$refs.sheet.parentElement.clientHeight * 0.85;
+    const max = (this.$refs.sheet.parentElement?.clientHeight ?? innerHeight) * 0.85;
     const height = Math.min(max, Math.max(this.peekPx, this.drag.height - dy));
     this.sheetHeight = `${height}px`;
   },
 
-  dragEnd(e) {
+  dragEnd(e: PointerEvent) {
     if (!this.drag) return;
     const dy = e.clientY - this.drag.y;
     this.drag = null;
@@ -105,7 +113,7 @@ Alpine.data('trainApp', () => ({
     else this.openSheet(this.sheetOpen);
   },
 
-  get visibleStops() {
+  get visibleStops(): (Stop & { i: number })[] {
     if (!this.train) return [];
     return this.train.stops.map((s, i) => ({ ...s, i })).filter((s) => this.showPassing || s.halt);
   },
@@ -164,7 +172,7 @@ Alpine.data('trainApp', () => ({
       }
       document.title = `${number} ${train.name} · Train Route`;
     } catch (e) {
-      this.error = e.message;
+      this.error = e instanceof Error ? e.message : String(e);
     } finally {
       this.loading = false;
     }
@@ -182,7 +190,7 @@ Alpine.data('trainApp', () => ({
     this.$nextTick(() => this.measurePeek());
   },
 
-  selectStop(i) {
+  selectStop(i: number) {
     this.selected = i;
     if (phone.matches) this.openSheet(false);
     focusStop(i);
