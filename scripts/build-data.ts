@@ -1,9 +1,7 @@
 // Builds per-train JSON files from the datameet railways dataset
-// (https://github.com/datameet/railways) into public/data/.
+// (https://github.com/datameet/railways) into public/data/, which is
+// committed. Run locally with `npm run data`; deploys never run it.
 // Runs with Node's built-in TypeScript support (Node 22.18+), no build step.
-//
-//   node scripts/build-data.ts              rebuild everything
-//   node scripts/build-data.ts --if-missing skip when public/data/index.json exists
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -51,10 +49,6 @@ const rawDir = join(root, 'data/raw');
 const outDir = join(root, 'public/data');
 const trainsDir = join(outDir, 'trains');
 const SOURCE = 'https://raw.githubusercontent.com/datameet/railways/master';
-
-if (process.argv.includes('--if-missing') && existsSync(join(outDir, 'index.json'))) {
-  process.exit(0);
-}
 
 async function loadRaw<T>(name: string): Promise<T> {
   const file = join(rawDir, `${name}.json`);

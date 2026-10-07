@@ -8,10 +8,8 @@
   },
   "scripts": {
     "data": "node scripts/build-data.ts",
-    "predev": "node scripts/build-data.ts --if-missing",
     "dev": "vite",
     "typecheck": "tsc",
-    "prebuild": "node scripts/build-data.ts --if-missing",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
