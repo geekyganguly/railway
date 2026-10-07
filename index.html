@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Train Route</title>
+    <script>
+      // Basecoat themes dark mode through a .dark class on <html>.
+      const dark = matchMedia('(prefers-color-scheme: dark)');
+      const applyTheme = () => document.documentElement.classList.toggle('dark', dark.matches);
+      applyTheme();
+      dark.addEventListener('change', applyTheme);
+    </script>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body class="bg-background text-foreground antialiased">
+    <div x-data="trainApp" class="flex h-dvh flex-col">
+      <header class="border-b px-4 py-3">
+        <h1 class="text-lg font-semibold">Indian Railways train route</h1>
+      </header>
+
+      <main class="relative min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+        <!-- Phones: a bottom sheet over the map that stays peeking. Desktop: the left column. -->
+        <section
+          x-ref="sheet"
+          class="bg-background absolute inset-x-0 bottom-0 z-10 flex h-(--sheet-h) max-h-[85%] flex-col overflow-hidden rounded-t-2xl border-t shadow-[0_-8px_24px_rgb(0_0_0/0.15)] lg:static lg:z-auto lg:h-auto lg:max-h-none lg:rounded-none lg:border-t-0 lg:shadow-none"
+          :class="dragging || 'transition-[height] duration-300 ease-out'"
+          :style="sheetHeight && `--sheet-h: ${sheetHeight}`"
+        >
+          <button
+            type="button"
+            class="flex w-full shrink-0 cursor-grab touch-none justify-center pt-2 pb-1 lg:hidden"
+            :aria-expanded="sheetOpen"
+            :aria-label="sheetOpen ? 'Collapse details' : 'Expand details'"
+            @click="toggleSheet()"
+            @pointerdown="dragStart($event)"
+            @pointermove="dragMove($event)"
+            @pointerup="dragEnd($event)"
+            @pointercancel="dragEnd($event)"
+          >
+            <span class="bg-muted-foreground/40 block h-1.5 w-10 rounded-full"></span>
+          </button>
+          <div
+            x-ref="sheetBody"
+            class="flex min-h-0 flex-1 flex-col gap-4 p-4 pt-1 *:shrink-0 lg:overflow-y-auto lg:pt-4"
+            :class="sheetOpen ? 'overflow-y-auto' : 'overflow-hidden'"
+          >
+            <form class="card" data-size="sm" data-peek @submit.prevent="search()">
+              <section class="field gap-2">
+                <label class="label" for="train-number">Train number</label>
+                <div class="flex gap-2">
+                  <input
+                    id="train-number"
+                    class="input flex-1"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    list="train-suggestions"
+                    placeholder="e.g. 12951 or Rajdhani"
+                    x-model="query"
+                    @input.debounce.150ms="suggest()"
+                  />
+                  <button class="btn" type="submit" :disabled="loading">
+                    <span x-text="loading ? 'Loading…' : 'Show route'"></span>
+                  </button>
+                </div>
+                <datalist id="train-suggestions">
+                  <template x-for="[number, name] in suggestions" :key="number">
+                    <option :value="`${number} — ${name}`"></option>
+                  </template>
+                </datalist>
+              </section>
+            </form>
+
+            <div class="alert" data-variant="destructive" role="alert" data-peek x-show="error" x-cloak>
+              <h2>Couldn't show that train</h2>
+              <section x-text="error"></section>
+            </div>
+
+            <template x-if="train">
+              <div class="card" data-size="sm">
+                <header data-peek>
+                  <h2 class="card-title text-base">
+                    <span class="tabular-nums" x-text="train.number"></span>
+                    <span x-text="train.name"></span>
+                  </h2>
+                  <p>
+                    <span x-text="`${train.from.name} (${train.from.code})`"></span>
+                    →
+                    <span x-text="`${train.to.name} (${train.to.code})`"></span>
+                  </p>
+                </header>
+                <section class="flex flex-wrap gap-2">
+                  <span class="badge" x-text="`${haltCount} stops`"></span>
+                  <span class="badge" data-variant="secondary" x-show="train.type" x-text="train.type"></span>
+                  <span class="badge" data-variant="outline" x-show="train.distance" x-text="`${train.distance} km`"></span>
+                  <span class="badge" data-variant="outline" x-show="train.departure && train.arrival"
+                    x-text="`${train.departure} → ${train.arrival}`"></span>
+                  <span class="badge" data-variant="destructive" x-show="unmappedCount"
+                    x-text="`${unmappedCount} not on map`"></span>
+                </section>
+                <section>
+                  <label class="field" data-orientation="horizontal">
+                    <input class="input" type="checkbox" role="switch" x-model="showPassing" />
+                    <span class="label text-sm font-normal">Show stations it passes without stopping</span>
+                  </label>
+                </section>
+                <section>
+                  <div class="table-container">
+                    <table class="table text-sm">
+                      <thead>
+                        <tr>
+                          <th class="w-8 max-sm:hidden">#</th>
+                          <th>Station</th>
+                          <th class="text-right">Arr</th>
+                          <th class="text-right">Dep</th>
+                          <th class="text-right">Day</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template x-for="stop in visibleStops" :key="stop.i">
+                          <tr
+                            class="cursor-pointer"
+                            :class="!stop.halt && 'text-muted-foreground'"
+                            :data-state="selected === stop.i ? 'selected' : null"
+                            tabindex="0"
+                            @click="selectStop(stop.i)"
+                            @keydown.enter="selectStop(stop.i)"
+                          >
+                            <td class="tabular-nums max-sm:hidden" x-text="stop.i + 1"></td>
+                            <td class="whitespace-normal">
+                              <span x-text="stop.name"></span>
+                              <span class="text-muted-foreground text-xs" x-text="stop.code"></span>
+                              <span class="badge ml-1" data-variant="outline" x-show="stop.lat === null">not on map</span>
+                            </td>
+                            <td class="text-right tabular-nums" x-text="stop.arr ?? '—'"></td>
+                            <td class="text-right tabular-nums" x-text="stop.dep ?? '—'"></td>
+                            <td class="text-right tabular-nums" x-text="stop.day"></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            </template>
+
+            <p class="text-muted-foreground mt-auto text-xs">
+              Timetables from the
+              <a class="underline" href="https://github.com/datameet/railways" target="_blank" rel="noopener">datameet
+                railways dataset</a>
+              (about 2017), so some routes and times will have changed since.
+            </p>
+          </div>
+        </section>
+
+        <div x-ref="map" class="absolute inset-0 lg:static lg:border-l"></div>
+      </main>
+    </div>
+  </body>
+</html>
