@@ -170,7 +170,7 @@ Alpine.data('trainApp', () => ({
       if (updateUrl && new URLSearchParams(location.search).get('train') !== number) {
         history.pushState(null, '', `?train=${number}`);
       }
-      document.title = `${number} ${train.name} · Train Route`;
+      document.title = `railway · ${number} ${train.name}`;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -186,7 +186,7 @@ Alpine.data('trainApp', () => ({
     this.train = null;
     this.selected = null;
     clearRoute();
-    document.title = 'Train Route';
+    document.title = 'railway · Train Route';
     this.$nextTick(() => this.measurePeek());
   },
 
